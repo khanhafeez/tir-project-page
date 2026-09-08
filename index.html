@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test-time Prompt Refinement for Text-to-Image Models</title>
+<meta name="description" content="TIR: a closed-loop, training-free framework that uses an MLLM to iteratively refine prompts for text-to-image models at test time.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="wrap topnav-inner">
+    <a href="#overview" class="brand">TIR</a>
+    <div class="navlinks">
+      <a href="#overview">Overview</a>
+      <a href="#highlights">Highlights</a>
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#citation">Citation</a>
+    </div>
+    <div class="navcta">
+      <a href="https://arxiv.org/abs/2507.22076" target="_blank" rel="noopener noreferrer">Paper</a>
+      <a href="https://github.com/hafeezkhan909/Test-time-Image-Refinement" target="_blank" rel="noopener noreferrer">Code</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="overview">
+  <div class="wrap">
+    <h1>Test-time Prompt Refinement for Text-to-Image Models</h1>
+    <p class="venue">ICCV 2025</p>
+
+    <p class="authors">
+      Mohammad Abdul Hafeez Khan<sup>1*</sup>,
+      Yash Jain<sup>2*</sup>,
+      Siddhartha Bhattacharyya<sup>1</sup>,
+      Vibhav Vineet<sup>2</sup>
+    </p>
+    <p class="affiliations">
+      <sup>1</sup>Florida Institute of Technology &nbsp;&nbsp; <sup>2</sup>Microsoft Research &nbsp;&nbsp; <span class="note">*Equal contribution</span>
+    </p>
+
+    <nav class="links">
+      <a href="https://arxiv.org/abs/2507.22076" target="_blank" rel="noopener noreferrer">Paper</a>
+      <span class="sep">&middot;</span>
+      <a href="https://openaccess.thecvf.com/content/ICCV2025W/MARS2/papers/Khan_Test-time_Prompt_Refinement_for_Text-to-Image_Models_ICCVW_2025_paper.pdf" target="_blank" rel="noopener noreferrer">Presentation</a>
+      <span class="sep">&middot;</span>
+      <a href="https://github.com/hafeezkhan909/Test-time-Image-Refinement" target="_blank" rel="noopener noreferrer">Code</a>
+      <span class="sep">&middot;</span>
+      <a href="#citation">Citation</a>
+    </nav>
+  </div>
+
+  <div class="wrap">
+    <figure class="fig">
+      <img src="assets/teaser.png" width="1190" height="231" style="max-width:950px;" alt="Figure 1: three example prompts, base model output on the left and TIR-refined output on the right, for a horse riding an astronaut, a white car and a red sheep, and a pink triangular stop sign." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:950px;">The same model, before and after test-time refinement. Left: base DALL-E&nbsp;3 output. Right: after TIR. <em>&ldquo;A horse riding an astronaut,&rdquo; &ldquo;a white car and a red sheep,&rdquo; &ldquo;a pink stop sign in the shape of a triangle.&rdquo;</em></figcaption>
+    </figure>
+
+    <p class="lede">
+      Text-to-image models are sensitive to how a prompt is worded. A small change in phrasing can flip the meaning of a scene, drop an object, or scramble a spatial relationship, even when the resulting image still looks convincing on its own.
+    </p>
+    <p class="lede">
+      TIR closes that loop at inference time. After every generation, a multimodal LLM looks at the image next to the prompt, points out what doesn't match, and rewrites the prompt. The image is regenerated and the cycle repeats for a fixed number of rounds, with the full prompt history kept in context so later corrections build on earlier ones instead of starting over.
+    </p>
+  </div>
+</header>
+
+<main>
+
+  <section class="block wrap" id="highlights">
+    <h2>Highlights</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <p class="stat-num">Training-free</p>
+        <p class="stat-label">No fine-tuning, no layout or bounding-box supervision.</p>
+      </div>
+      <div class="stat">
+        <p class="stat-num">MLLM-agnostic</p>
+        <p class="stat-label">Consistent gains whether GPT-4o or Qwen2.5-VL-7B judges the images.</p>
+      </div>
+      <div class="stat">
+        <p class="stat-num">38.75 &rarr; 54.0</p>
+        <p class="stat-label"><strong>+15.25</strong> average accuracy gain for Stable Diffusion 1.5, across negation, numeracy, attribute, and spatial tasks on the LLM-grounded Diffusion benchmark.</p>
+      </div>
+      <div class="stat">
+        <p class="stat-num">60.37 &rarr; 68.04</p>
+        <p class="stat-label"><strong>+7.67</strong> point gain in overall GenEval score for DALL-E&nbsp;3, across position, counting, single-object, two-object, color attribute, and color tasks.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block wrap" id="method">
+    <h2>Method</h2>
+    <figure class="fig">
+      <img src="assets/method.png" width="599" height="381" style="max-width:480px;" alt="Figure 2: TIR pipeline diagram, generation followed by MLLM consistency check and prompt refinement, repeated for a fixed number of iterations." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:480px;">Generate, judge, refine, regenerate. Repeated for a fixed number of rounds.</figcaption>
+    </figure>
+
+    <ol class="steps">
+      <li>Generate an image from the current prompt.</li>
+      <li>An MLLM compares the image against the original prompt and identifies what's missing or wrong.</li>
+      <li>The MLLM rewrites the prompt, using that feedback and every refinement made so far.</li>
+      <li>Regenerate the image from the new prompt, and repeat.</li>
+    </ol>
+    <p class="note-line">No fine-tuning, no layout or bounding-box supervision. Works with any text-to-image model, including closed APIs.</p>
+
+    <figure class="fig">
+      <img src="assets/iterative_example.png" width="579" height="671" style="max-width:320px;" alt="Figure 3: a full refinement trajectory across four iterations, showing the prompt and generated image evolving each round." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:320px;">A full trajectory: each round's refined prompt on the left, the image it produced on the right.</figcaption>
+    </figure>
+  </section>
+
+  <section class="block wrap" id="results">
+    <h2>Results</h2>
+
+    <h3>Qualitative</h3>
+    <figure class="fig">
+      <img src="assets/lmd_qualitative.png" width="1067" height="647" style="max-width:850px;" alt="Figure 6: qualitative comparison against LMD and LMD+ baselines on LLM-grounded diffusion benchmark prompts." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:850px;">Against LMD and LMD+ on the LLM-grounded diffusion benchmark. TIR holds up even where the baselines already got it right.</figcaption>
+    </figure>
+
+    <figure class="fig">
+      <img src="assets/drawbench_qualitative.png" width="945" height="410" style="max-width:750px;" alt="Figure 7: qualitative results on open-ended DrawBench prompts, base model output on the left and TIR output on the right." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:750px;">Open-ended DrawBench prompts. Stronger backbones can lean harder into the decomposed, refined prompt.</figcaption>
+    </figure>
+
+    <figure class="fig">
+      <img src="assets/mllm_qualitative.png" width="507" height="227" style="max-width:400px;" alt="Figure 9: qualitative comparison between Qwen2.5-VL-7B and GPT-4o as the judge model, on the prompt a photo of a train above a potted plant." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:400px;">Same prompt, two judge models. Qwen2.5-VL-7B lands on a literal reading; GPT-4o optimizes toward a more natural-looking scene.</figcaption>
+    </figure>
+
+    <h3>Benchmarks</h3>
+
+    <div class="table-block">
+      <p class="table-caption">LLM-grounded diffusion benchmark. TIR improves every backbone tested, with the largest gains on negation and numeracy. <span class="mllm-tag">MLLM: GPT-4o</span></p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Method</th><th>Negation</th><th>Numeracy</th><th>Attribute</th><th>Spatial</th><th>Average</th></tr>
+          </thead>
+          <tbody>
+            <tr class="baseline-row"><td>MultiDiffusion</td><td>29.0</td><td>28.0</td><td>26.0</td><td>39.0</td><td>30.5</td></tr>
+            <tr class="baseline-row"><td>Backward Guidance</td><td>22.0</td><td>37.0</td><td>26.0</td><td>67.0</td><td>38.0</td></tr>
+            <tr class="baseline-row"><td>BoxDiff</td><td>22.0</td><td>30.0</td><td>37.0</td><td>71.0</td><td>40.0</td></tr>
+            <tr class="baseline-row"><td>LayoutGPT + GLIGEN</td><td>36.0</td><td>65.0</td><td>26.0</td><td>78.0</td><td>51.3</td></tr>
+            <tr class="baseline-row"><td>LMD</td><td>100.0</td><td>40.0</td><td>50.5</td><td>38.7</td><td>57.3</td></tr>
+            <tr class="baseline-row"><td>LMD+</td><td>100.0</td><td>50.9</td><td>63.5</td><td>42.0</td><td>64.1</td></tr>
+            <tr><td>SD-1.5</td><td>35.0</td><td>40.0</td><td>42.0</td><td>38.0</td><td>38.75</td></tr>
+            <tr class="tir-row"><td>w/ TIR</td><td class="win">80.0</td><td class="win">51.7</td><td>30.0</td><td class="win">54.5</td><td class="win">54.0 <span class="delta">+15.25</span></td></tr>
+            <tr><td>SD-2.1</td><td>45.0</td><td>50.6</td><td>18.0</td><td>44.5</td><td>39.5</td></tr>
+            <tr class="tir-row"><td>w/ TIR</td><td class="win">85.0</td><td class="win">56.0</td><td>18.0</td><td>43.0</td><td class="win">50.5 <span class="delta">+11.0</span></td></tr>
+            <tr><td>Flux</td><td>10.0</td><td>52.2</td><td>83.0</td><td>81.5</td><td>56.7</td></tr>
+            <tr class="tir-row"><td>w/ TIR</td><td class="win">55.0</td><td class="win">64.7</td><td>81.8</td><td>77.0</td><td class="win">69.6 <span class="delta">+12.9</span></td></tr>
+            <tr><td>DALL-E&nbsp;3</td><td>31.6</td><td>44.5</td><td>73.0</td><td>81.0</td><td>57.5</td></tr>
+            <tr class="tir-row"><td>w/ TIR</td><td class="win">73.7</td><td class="win">49.2</td><td>71.0</td><td class="win">83.0</td><td class="win">69.2 <span class="delta">+11.7</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-block">
+      <p class="table-caption">GenEval. The biggest lift is on position and counting; single-object prompts were already near ceiling. <span class="mllm-tag">MLLM: GPT-4o</span></p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Position</th><th>Counting</th><th>Single Obj.</th><th>Two Object</th><th>Color Attr.</th><th>Colors</th><th>Overall</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Flux</td><td>19.00</td><td>68.75</td><td>100.00</td><td>75.76</td><td>48.00</td><td>77.66</td><td>64.86</td></tr>
+            <tr class="tir-row"><td>w/ TIR</td><td class="win">49.00</td><td class="win">71.25</td><td>98.75</td><td class="win">80.81</td><td>47.00</td><td class="win">80.85</td><td class="win">71.27 <span class="delta">+6.41</span></td></tr>
+            <tr><td>DALL-E&nbsp;3</td><td>34.00</td><td>48.75</td><td>96.25</td><td>77.78</td><td>31.00</td><td>74.47</td><td>60.37</td></tr>
+            <tr class="tir-row"><td>w/ TIR</td><td class="win">45.00</td><td class="win">60.00</td><td>96.25</td><td class="win">82.83</td><td class="win">38.00</td><td class="win">86.17</td><td class="win">68.04 <span class="delta">+7.67</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-block">
+      <p class="table-caption">TIR improving Flux performance. <span class="mllm-tag">MLLM: Qwen2.5-VL-7B</span></p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Position</th><th>Counting</th><th>Single Obj.</th><th>Two Object</th><th>Color Attr.</th><th>Colors</th><th>Overall</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Flux</td><td>19.00</td><td>68.75</td><td>100.00</td><td>75.76</td><td>48.00</td><td>77.66</td><td>64.86</td></tr>
+            <tr class="tir-row"><td>w/ TIR</td><td class="win">29.00</td><td>67.50</td><td>98.75</td><td class="win">86.87</td><td>44.00</td><td class="win">81.91</td><td class="win">68.01 <span class="delta">+3.15</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h3>DrawBench</h3>
+    <figure class="fig">
+      <img src="assets/drawbench_results.png" width="475" height="339" style="max-width:380px;" alt="DrawBench evaluation: ImageReward score improvement on DALL-E 3 across repeated runs, and human-judged prompt alignment, with and without TIR." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:380px;">ImageReward on DALL-E&nbsp;3 across five runs per prompt (error bars: std. dev.), alongside human-judged prompt alignment. TIR improves both. <span class="mllm-tag">MLLM: GPT-4o</span></figcaption>
+    </figure>
+
+    <h3>How many rounds</h3>
+    <figure class="fig">
+      <img src="assets/k_ablation.png" width="456" height="330" style="max-width:360px;" alt="Figure 4: human evaluation on DrawBench for K = 1 to 6 refinement rounds." onerror="this.classList.add('missing')">
+      <figcaption style="max-width:360px;">Accuracy keeps improving with more rounds, but so does runtime. We fix K = 3 everywhere else in the paper as a balance between the two.</figcaption>
+    </figure>
+  </section>
+
+  <section class="block wrap" id="citation">
+    <h2>Citation</h2>
+    <div class="bib-box">
+      <button class="copy-btn" onclick="copyBib()">Copy</button>
+      <pre id="bib-text">@inproceedings{khan2025test,
+  title={Test-time prompt refinement for text-to-image models},
+  author={Khan, Mohammed Abdul Hafeez and Jain, Yash and Bhattacharyya, Siddhartha and Vineet, Vibhav},
+  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
+  pages={6565--6575},
+  year={2025}
+}</pre>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built on <a href="https://arxiv.org/abs/2112.10752" target="_blank" rel="noopener noreferrer">Stable Diffusion</a>, <a href="https://arxiv.org/abs/2307.01952" target="_blank" rel="noopener noreferrer">SDXL</a>, <a href="https://arxiv.org/abs/2403.03206" target="_blank" rel="noopener noreferrer">Stable Diffusion 3</a>, <a href="https://arxiv.org/abs/2501.18427" target="_blank" rel="noopener noreferrer">SANA 1.5</a>, <a href="https://github.com/black-forest-labs/flux" target="_blank" rel="noopener noreferrer">Flux</a>, <a href="https://cdn.openai.com/papers/dall-e-3.pdf" target="_blank" rel="noopener noreferrer">DALL-E 3</a>, <a href="https://arxiv.org/abs/2502.13923" target="_blank" rel="noopener noreferrer">Qwen2.5-VL</a>, and GPT-4o. We thank their authors for making these models available and sharing their work with the community.</p>
+    <p class="fine">Mohammad Abdul Hafeez Khan &middot; Yash Jain &middot; Siddhartha Bhattacharyya &middot; Vibhav Vineet</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
